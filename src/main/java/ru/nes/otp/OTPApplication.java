@@ -4,7 +4,10 @@ import com.sun.net.httpserver.HttpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.nes.otp.config.ServerConfig;
+import ru.nes.otp.handler.AdminHandler;
+import ru.nes.otp.handler.AuthHandler;
 import ru.nes.otp.handler.NotFoundHandler;
+import ru.nes.otp.security.AuthFilter;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -31,7 +34,18 @@ public class OTPApplication {
                     serverConfig.getBacklog()
             );
 
-            // Настройка контекстов (пока только заглушка для 404)
+            // Создание фильтра аутентификации
+            AuthFilter authFilter = new AuthFilter();
+
+            // Настройка контекстов с фильтрами
+            server.createContext("/api/register", new AuthHandler());
+            server.createContext("/api/login", new AuthHandler());
+
+            // Контексты с фильтром аутентификации
+            var adminContext = server.createContext("/api/admin", new AdminHandler());
+            adminContext.getFilters().add(authFilter);
+
+            // 404 для всех остальных путей
             server.createContext("/", new NotFoundHandler());
 
             // Настройка executor с пулом потоков
@@ -42,6 +56,13 @@ public class OTPApplication {
 
             logger.info("OTP Service started successfully on port {}", serverConfig.getPort());
             logger.info("Server is ready to accept requests");
+            logger.info("Endpoints:");
+            logger.info("  POST /api/register - Register new user");
+            logger.info("  POST /api/login - Login and get JWT token");
+            logger.info("  GET /api/admin/users - List all users (Admin only)");
+            logger.info("  DELETE /api/admin/users/{id} - Delete user (Admin only)");
+            logger.info("  GET /api/admin/config - Get OTP config (Admin only)");
+            logger.info("  PUT /api/admin/config - Update OTP config (Admin only)");
 
         } catch (IOException e) {
             logger.error("Failed to start OTP Service", e);
