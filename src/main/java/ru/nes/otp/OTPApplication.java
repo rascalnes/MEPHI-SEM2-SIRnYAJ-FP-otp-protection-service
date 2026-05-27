@@ -7,7 +7,9 @@ import ru.nes.otp.config.ServerConfig;
 import ru.nes.otp.handler.AdminHandler;
 import ru.nes.otp.handler.AuthHandler;
 import ru.nes.otp.handler.NotFoundHandler;
+import ru.nes.otp.handler.UserHandler;
 import ru.nes.otp.security.AuthFilter;
+import ru.nes.otp.service.scheduler.OtpExpiryScheduler;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -37,11 +39,15 @@ public class OTPApplication {
             // Создание фильтра аутентификации
             AuthFilter authFilter = new AuthFilter();
 
-            // Настройка контекстов с фильтрами
+            // Публичные эндпоинты (без фильтра)
             server.createContext("/api/register", new AuthHandler());
             server.createContext("/api/login", new AuthHandler());
 
-            // Контексты с фильтром аутентификации
+            // Пользовательские эндпоинты (с фильтром)
+            var userContext = server.createContext("/api/otp", new UserHandler());
+            userContext.getFilters().add(authFilter);
+
+            // Административные эндпоинты (с фильтром)
             var adminContext = server.createContext("/api/admin", new AdminHandler());
             adminContext.getFilters().add(authFilter);
 
@@ -51,6 +57,9 @@ public class OTPApplication {
             // Настройка executor с пулом потоков
             server.setExecutor(Executors.newCachedThreadPool());
 
+            // Запуск планировщика для просроченных OTP-кодов
+            OtpExpiryScheduler.start();
+
             // Запуск сервера
             server.start();
 
@@ -59,10 +68,14 @@ public class OTPApplication {
             logger.info("Endpoints:");
             logger.info("  POST /api/register - Register new user");
             logger.info("  POST /api/login - Login and get JWT token");
+            logger.info("  POST /api/otp/generate - Generate OTP code (User/Admin)");
+            logger.info("  POST /api/otp/validate - Validate OTP code (User/Admin)");
             logger.info("  GET /api/admin/users - List all users (Admin only)");
             logger.info("  DELETE /api/admin/users/{id} - Delete user (Admin only)");
             logger.info("  GET /api/admin/config - Get OTP config (Admin only)");
             logger.info("  PUT /api/admin/config - Update OTP config (Admin only)");
+            logger.info("");
+            logger.info("OTP Expiry Scheduler is running (checks every 30 seconds)");
 
         } catch (IOException e) {
             logger.error("Failed to start OTP Service", e);

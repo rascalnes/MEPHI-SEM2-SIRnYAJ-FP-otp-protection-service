@@ -8,7 +8,6 @@ import ru.nes.otp.model.entity.enums.UserRole;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -28,7 +27,9 @@ public class AuthFilter extends Filter {
     // Маппинг эндпоинтов к требуемым ролям
     private static final Map<String, UserRole> ROLE_REQUIREMENTS = Map.of(
             "/api/admin/users", UserRole.ADMIN,
-            "/api/admin/config", UserRole.ADMIN
+            "/api/admin/config", UserRole.ADMIN,
+            "/api/otp/generate", UserRole.USER,
+            "/api/otp/validate", UserRole.USER
     );
 
     @Override
@@ -61,10 +62,17 @@ public class AuthFilter extends Filter {
         String role = JwtUtil.extractRole(token);
         UserRole userRole = UserRole.fromString(role);
 
-        // Проверяем права доступа
-        if (requiresAdminRole(path) && userRole != UserRole.ADMIN) {
-            sendErrorResponse(exchange, 403, "Forbidden: Admin access required");
-            return;
+        // Проверяем права доступа для protected эндпоинтов
+        UserRole requiredRole = getRequiredRole(path);
+        if (requiredRole != null) {
+            if (requiredRole == UserRole.ADMIN && userRole != UserRole.ADMIN) {
+                sendErrorResponse(exchange, 403, "Forbidden: Admin access required");
+                return;
+            }
+            if (requiredRole == UserRole.USER && userRole == UserRole.ADMIN) {
+                // ADMIN может делать всё, что и USER
+                logger.debug("Admin accessing user endpoint: {}", path);
+            }
         }
 
         // Сохраняем информацию о пользователе в атрибуты запроса
@@ -72,7 +80,7 @@ public class AuthFilter extends Filter {
         exchange.setAttribute("userId", login);
         exchange.setAttribute("userRole", role);
 
-        logger.info("Authenticated request: {} {} by user: {}", method, path, login);
+        logger.info("Authenticated request: {} {} by user: {} (role: {})", method, path, login, role);
         chain.doFilter(exchange);
     }
 
@@ -80,8 +88,13 @@ public class AuthFilter extends Filter {
         return PUBLIC_ENDPOINTS.stream().anyMatch(path::startsWith);
     }
 
-    private boolean requiresAdminRole(String path) {
-        return ROLE_REQUIREMENTS.keySet().stream().anyMatch(path::startsWith);
+    private UserRole getRequiredRole(String path) {
+        for (Map.Entry<String, UserRole> entry : ROLE_REQUIREMENTS.entrySet()) {
+            if (path.startsWith(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private String extractToken(String authHeader) {
