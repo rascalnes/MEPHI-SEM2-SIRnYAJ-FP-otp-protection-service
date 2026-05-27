@@ -1,0 +1,1 @@
+rootProject.name = "MEPHI-SEM2-SIRnYAJ-FP-otp-protection-service"
