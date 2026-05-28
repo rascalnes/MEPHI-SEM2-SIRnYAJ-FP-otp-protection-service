@@ -8,6 +8,7 @@ import ru.nes.otp.model.entity.enums.UserRole;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 
@@ -36,10 +37,14 @@ public class AuthFilter extends Filter {
     public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
         String path = exchange.getRequestURI().getPath();
         String method = exchange.getRequestMethod();
+        String clientIp = exchange.getRemoteAddress().getAddress().getHostAddress();
+
+        // Устанавливаем время начала обработки для ВСЕХ запросов
+        exchange.setAttribute("startTime", System.currentTimeMillis());
 
         // Проверяем, требует ли эндпоинт аутентификации
         if (isPublicEndpoint(path)) {
-            logger.debug("Public endpoint accessed: {} {}", method, path);
+            logger.debug("Public endpoint accessed: {} {} from {}", method, path, clientIp);
             chain.doFilter(exchange);
             return;
         }
@@ -49,16 +54,20 @@ public class AuthFilter extends Filter {
         String token = extractToken(authHeader);
 
         if (token == null || !JwtUtil.validateToken(token)) {
+            logger.warn("Unauthorized access attempt to {} {} from {} - Invalid or missing token",
+                    method, path, clientIp);
             sendErrorResponse(exchange, 401, "Unauthorized: Invalid or missing token");
             return;
         }
 
         if (JwtUtil.isTokenExpired(token)) {
+            logger.warn("Unauthorized access attempt to {} {} from {} - Token expired", method, path, clientIp);
             sendErrorResponse(exchange, 401, "Unauthorized: Token expired");
             return;
         }
 
         // Извлекаем роль из токена
+        String login = JwtUtil.extractLogin(token);
         String role = JwtUtil.extractRole(token);
         UserRole userRole = UserRole.fromString(role);
 
@@ -66,21 +75,20 @@ public class AuthFilter extends Filter {
         UserRole requiredRole = getRequiredRole(path);
         if (requiredRole != null) {
             if (requiredRole == UserRole.ADMIN && userRole != UserRole.ADMIN) {
+                logger.warn("Forbidden access attempt to {} {} by user: {} (role: {}) - Admin required",
+                        method, path, login, role);
                 sendErrorResponse(exchange, 403, "Forbidden: Admin access required");
                 return;
-            }
-            if (requiredRole == UserRole.USER && userRole == UserRole.ADMIN) {
-                // ADMIN может делать всё, что и USER
-                logger.debug("Admin accessing user endpoint: {}", path);
             }
         }
 
         // Сохраняем информацию о пользователе в атрибуты запроса
-        String login = JwtUtil.extractLogin(token);
         exchange.setAttribute("userId", login);
         exchange.setAttribute("userRole", role);
 
-        logger.info("Authenticated request: {} {} by user: {} (role: {})", method, path, login, role);
+        logger.info("Authenticated request: {} {} by {} (role: {}) from {}",
+                method, path, login, role, clientIp);
+
         chain.doFilter(exchange);
     }
 
@@ -105,12 +113,12 @@ public class AuthFilter extends Filter {
     }
 
     private void sendErrorResponse(HttpExchange exchange, int statusCode, String message) throws IOException {
-        String response = String.format("{\"status\":\"error\",\"message\":\"%s\"}", message);
+        String response = String.format("{\"status\":\"error\",\"code\":%d,\"message\":\"%s\"}", statusCode, message);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
-        exchange.sendResponseHeaders(statusCode, response.getBytes().length);
+        exchange.sendResponseHeaders(statusCode, response.getBytes(StandardCharsets.UTF_8).length);
 
         try (OutputStream os = exchange.getResponseBody()) {
-            os.write(response.getBytes());
+            os.write(response.getBytes(StandardCharsets.UTF_8));
         }
     }
 

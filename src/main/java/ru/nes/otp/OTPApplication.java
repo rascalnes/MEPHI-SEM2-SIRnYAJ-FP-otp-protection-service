@@ -17,7 +17,6 @@ import java.util.concurrent.Executors;
 
 /**
  * Главный класс приложения.
- * Точка входа для OTP-сервиса защиты операций.
  */
 public class OTPApplication {
 
@@ -39,9 +38,12 @@ public class OTPApplication {
             // Создание фильтра аутентификации
             AuthFilter authFilter = new AuthFilter();
 
-            // Публичные эндпоинты (без фильтра)
-            server.createContext("/api/register", new AuthHandler());
-            server.createContext("/api/login", new AuthHandler());
+            // Публичные эндпоинты (тоже с фильтром, но фильтр пропустит их)
+            var authContext = server.createContext("/api/register", new AuthHandler());
+            authContext.getFilters().add(authFilter);
+
+            var loginContext = server.createContext("/api/login", new AuthHandler());
+            loginContext.getFilters().add(authFilter);
 
             // Пользовательские эндпоинты (с фильтром)
             var userContext = server.createContext("/api/otp", new UserHandler());
@@ -68,8 +70,8 @@ public class OTPApplication {
             logger.info("Endpoints:");
             logger.info("  POST /api/register - Register new user");
             logger.info("  POST /api/login - Login and get JWT token");
-            logger.info("  POST /api/otp/generate - Generate OTP code (User/Admin)");
-            logger.info("  POST /api/otp/validate - Validate OTP code (User/Admin)");
+            logger.info("  POST /api/otp/generate - Generate OTP code");
+            logger.info("  POST /api/otp/validate - Validate OTP code");
             logger.info("  GET /api/admin/users - List all users (Admin only)");
             logger.info("  DELETE /api/admin/users/{id} - Delete user (Admin only)");
             logger.info("  GET /api/admin/config - Get OTP config (Admin only)");

@@ -5,13 +5,12 @@ import ru.nes.otp.model.dto.request.LoginRequest;
 import ru.nes.otp.model.dto.request.RegisterRequest;
 import ru.nes.otp.model.dto.response.LoginResponse;
 import ru.nes.otp.service.AuthService;
+import ru.nes.otp.util.ValidatorUtil;
 
 import java.io.IOException;
 
 /**
  * Обработчик аутентификации.
- * POST /api/register - регистрация
- * POST /api/login - логин
  */
 public class AuthHandler extends BaseHandler {
 
@@ -32,57 +31,77 @@ public class AuthHandler extends BaseHandler {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
 
-        logger.info("Auth request: {} {}", method, path);
-
         try {
             if ("POST".equals(method)) {
-                if (path.endsWith("/register")) {
+                if (path.equals("/api/register")) {
                     handleRegister(exchange);
-                } else if (path.endsWith("/login")) {
+                } else if (path.equals("/api/login")) {
                     handleLogin(exchange);
                 } else {
-                    sendErrorResponse(exchange, 404, "Endpoint not found");
+                    sendNotFound(exchange, "Endpoint not found");
                 }
             } else {
-                sendErrorResponse(exchange, 405, "Method not allowed");
+                sendError(exchange, 405, "Method not allowed");
             }
         } catch (Exception e) {
             logger.error("Error handling auth request", e);
-            sendErrorResponse(exchange, 500, "Internal server error");
+            sendInternalError(exchange, "Internal server error");
         }
     }
 
     private void handleRegister(HttpExchange exchange) throws IOException {
         RegisterRequest request = parseBody(exchange, RegisterRequest.class);
 
-        if (request == null || !request.isValid()) {
-            sendErrorResponse(exchange, 400, "Invalid request: login (3-50 chars) and password (min 6 chars) required");
+        if (request == null) {
+            sendBadRequest(exchange, "Invalid request body");
+            return;
+        }
+
+        // Валидация логина
+        if (!ValidatorUtil.isValidLogin(request.getLogin())) {
+            sendBadRequest(exchange, "Invalid login: must be 3-50 characters (letters, numbers, underscore)");
+            return;
+        }
+
+        // Валидация пароля
+        if (!ValidatorUtil.isValidPassword(request.getPassword())) {
+            sendBadRequest(exchange, "Invalid password: must be at least 6 characters");
             return;
         }
 
         boolean success = authService.register(request);
 
         if (success) {
-            sendSuccessResponse(exchange, "User registered successfully");
+            sendSuccessMessage(exchange, "User registered successfully");
         } else {
-            sendErrorResponse(exchange, 409, "User already exists or invalid data");
+            sendConflict(exchange, "User already exists");
         }
     }
 
     private void handleLogin(HttpExchange exchange) throws IOException {
         LoginRequest request = parseBody(exchange, LoginRequest.class);
 
-        if (request == null || !request.isValid()) {
-            sendErrorResponse(exchange, 400, "Invalid request: login and password required");
+        if (request == null) {
+            sendBadRequest(exchange, "Invalid request body");
+            return;
+        }
+
+        if (request.getLogin() == null || request.getLogin().trim().isEmpty()) {
+            sendBadRequest(exchange, "Login is required");
+            return;
+        }
+
+        if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
+            sendBadRequest(exchange, "Password is required");
             return;
         }
 
         LoginResponse response = authService.login(request);
 
         if (response != null) {
-            sendSuccessResponse(exchange, response);
+            sendSuccess(exchange, response);
         } else {
-            sendErrorResponse(exchange, 401, "Invalid login or password");
+            sendError(exchange, 401, "Invalid login or password");
         }
     }
 }
