@@ -11,7 +11,7 @@
 - [API Эндпоинты](#api-эндпоинты)
 - [Тестирование](#тестирование)
 - [Структура проекта](#структура-проекта)
-- [Авторы](#авторы)
+- [Автор](#автор)
 
 ---
 
@@ -502,7 +502,7 @@ curl -X POST http://localhost:8080/api/otp/generate \
 ```
 
 ## Структура проекта
-
+```text
 otp-protection-service/
 ├── build.gradle.kts                 # Сборка Gradle
 ├── settings.gradle
@@ -543,6 +543,7 @@ otp-protection-service/
 │       └── logback.xml              # Логирование
 ├── logs/                            # Логи приложения
 └── otp-files/                       # Сохраненные OTP коды
+```
 
 ## Логирование
 
