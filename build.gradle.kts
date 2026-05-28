@@ -35,9 +35,9 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.4.14")
     implementation("org.slf4j:slf4j-api:2.0.11")
 
-    // Email (Angus Mail)
-    implementation("org.eclipse.angus:angus-mail:2.0.5")
-    implementation("org.eclipse.angus:angus-activation:2.0.1")
+    // Email (Jakarta Mail / Angus Mail)
+    implementation("com.sun.mail:jakarta.mail:2.0.1")
+    implementation("jakarta.activation:jakarta.activation-api:2.1.3")
 
     // SMS (JSMPP)
     implementation("org.jsmpp:jsmpp:3.0.1")

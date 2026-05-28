@@ -15,8 +15,11 @@ import ru.nes.otp.model.entity.User;
 import ru.nes.otp.model.entity.enums.ChannelType;
 import ru.nes.otp.model.entity.enums.OtpStatus;
 import ru.nes.otp.security.OtpCodeUtil;
+import ru.nes.otp.service.notification.*;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -29,11 +32,26 @@ public class OtpService {
     private final OtpCodeDAO otpCodeDAO;
     private final OtpConfigDAO otpConfigDAO;
     private final UserDAO userDAO;
+    private final Map<String, NotificationService> notificationServices;
 
     public OtpService() {
         this.otpCodeDAO = new OtpCodeDAO();
         this.otpConfigDAO = new OtpConfigDAO();
         this.userDAO = new UserDAO();
+        this.notificationServices = new HashMap<>();
+
+        // Инициализация сервисов уведомлений
+        registerNotificationService(new EmailNotificationService());
+        registerNotificationService(new SmsNotificationService());
+        registerNotificationService(new TelegramNotificationService());
+        registerNotificationService(new FileNotificationService());
+
+        logger.info("OtpService initialized with {} notification channels", notificationServices.size());
+    }
+
+    private void registerNotificationService(NotificationService service) {
+        notificationServices.put(service.getChannelType().toUpperCase(), service);
+        logger.info("Registered notification service: {}", service.getChannelType());
     }
 
     /**
@@ -97,21 +115,43 @@ public class OtpService {
             return null;
         }
 
+        // Отправка кода через выбранный канал
+        boolean sent = sendCodeViaChannel(request.getChannel(), request.getDestination(), plainCode);
+
+        if (!sent) {
+            logger.warn("Failed to send OTP code via {} to {}", request.getChannel(), request.getDestination());
+        }
+
         logger.info("OTP code generated successfully for operation: {}, codeId: {}",
                 request.getOperationId(), codeId);
 
-        // Возвращаем код (в реальном приложении здесь будет отправка через каналы)
-        // На этом этапе просто логируем код для тестирования
-        logger.info("Generated OTP code for {}: {} (expires in {} seconds)",
-                request.getDestination(), plainCode, config.getLifetimeSeconds());
+        String message = sent
+                ? String.format("OTP code sent successfully via %s to %s", request.getChannel(), request.getDestination())
+                : String.format("OTP code generated but failed to send via %s", request.getChannel());
 
         return new OtpGenerateResponse(
                 request.getOperationId(),
                 request.getChannel(),
                 request.getDestination(),
                 config.getLifetimeSeconds(),
-                "OTP code generated successfully. Code: " + plainCode + " (for testing only)"
+                message
         );
+    }
+
+    /**
+     * Отправка кода через указанный канал.
+     */
+    private boolean sendCodeViaChannel(String channel, String destination, String code) {
+        String channelUpper = channel.toUpperCase();
+        NotificationService service = notificationServices.get(channelUpper);
+
+        if (service == null) {
+            logger.error("Unknown notification channel: {}", channel);
+            return false;
+        }
+
+        logger.info("Sending OTP code via {} to {}", channelUpper, destination);
+        return service.sendCode(destination, code);
     }
 
     /**
