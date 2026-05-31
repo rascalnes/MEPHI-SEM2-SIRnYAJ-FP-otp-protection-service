@@ -50,8 +50,8 @@
 ### 1. Клонирование репозитория
 
 ```bash
-git clone <repository-url>
-cd otp-protection-service
+git clone https://github.com/rascalnes/MEPHI-SEM2-SIRnYAJ-FP-otp-protection-service
+cd MEPHI-SEM2-SIRnYAJ-FP-otp-protection-service
 ```
 
 ### 2. Настройка базы данных PostgreSQL
